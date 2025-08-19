@@ -30,4 +30,50 @@ Hipotetyczny operator telekomunikacyjny dogadał się ze związkiem banków, że
 - Jeśli przyjęto dodatkowe założenia, należy je opisać w pliku README.
 - Jednym z ocenianych elementów jest przyjęta architektura rozwiązania. Decyzje architektoniczne należy opisać w README.
 - Operatorowi zależy na szybkim czasie wdrożenia i niskim koszcie obsługi.
-- W razie wątpliwości należy przyjąć prostszą funkcjonalność, ale przedstawić rozwiązanie jak najbardziej gotowe do wdrożenia produkcyjnego.
+## Proponowana architektura: Przetwarzanie strumieniowe z Apache Kafka i Apache Flink
+
+**Założenia**
+* Detekcja phishingu jest wykonywana wyłącznie dla SMS-ów, których odbiorcy są zapisani do usługi antyphishingowej (opcja opt-in). Dla pozostałych użytkowników wiadomości są przekazywane bez dodatkowej analizy.
+* System korzysta z cache przy sprawdzaniu linków z racji tego że API kosztuje oraz ze zwględu na wydajność. Nie chcemy sprawdzać w zewnętrzym API więcej niż raz tych samych linków
+* Korzystamy z "Flink State" ponieważ zależy nam na szybkości oraz nie chcemy narazie komplikować
+  systemu i zwiększaść ilości zależności, przy wykorzystaniu zewenętrzej bazy
+
+![alt text](img/arch_sms.png)
+
+**Opis komponentów:**
+- **Kafka SMS Topic** – punkt wejścia dla wszystkich wiadomości SMS (JSON).
+- **Flink SMS Processing Job** – przetwarza strumień SMS, rozpoznaje komendy START/STOP, aktualizuje status użytkownika. Dla każdego SMS-a sprawdza, czy odbiorca jest zapisany do usługi:
+    - Jeśli TAK: przekazuje wiadomość do dalszej analizy phishingu.
+    - Jeśli NIE: przekazuje wiadomość bezpośrednio do dostarczenia (bez analizy phishingu).
+- **User Subscription State Store** – przechowuje status opt-in/opt-out użytkowników (np. Flink state, Redis, baza SQL).
+- **Flink Phishing Detection Job** – analizuje tylko SMS-y użytkowników zapisanych do usługi, sprawdza linki przez Google Web Risk API, przekazuje czyste wiadomości dalej.
+- **Google Web Risk API** – sprawdza podejrzane linki, z cache’owaniem wyników dla ograniczenia kosztów.
+- **Kafka Clean-SMS Topic** – temat dla zweryfikowanych, bezpiecznych wiadomości oraz tych, które nie wymagają analizy (użytkownicy nie zapisani).
+- **SMS Delivery System** – system końcowy dostarczający SMS do odbiorcy.
+- **Alerting/Logging** – obsługa przypadków phishingu (logi, alerty).
+
+### Diagram architektur
+
+![alt text](img/arch_sms.png)
+
+```mermaid
+flowchart LR
+    A[SMS Producer] --> B[Kafka SMS Topic]
+    B --> C[Flink Job: User State Management]
+    C -->|START/STOP| D[Flink State: User Subscription]
+    C -->|SMS od użytkownika zapisany?| E[Kafka Filtered-SMS Topic]
+    C -->|SMS od użytkownika NIEzapisany| H[Kafka Clean-SMS Topic]
+    E --> F[Flink Job: Phishing Detection]
+    F -->|Phishing Check| G[Google Web Risk API]
+    F -->|Cache hit| K[Flink State: Link Cache]
+    F -->|Clean SMS| H
+    H --> I[SMS Delivery System]
+    F -->|Blocked/Phishing| J[Alerting/Logging]
+```
+
+**Opis:**
+- Pierwszy job Flinka obsługuje START/STOP, aktualizuje stan użytkownika i dla każdego SMS-a sprawdza, czy odbiorca jest zapisany do usługi:
+    - Jeśli TAK: przekazuje SMS do kolejnego joba (detekcja phishingu).
+    - Jeśli NIE: przekazuje SMS bezpośrednio do dostarczenia (bez analizy phishingu).
+- Drugi job Flinka zajmuje się detekcją phishingu wyłącznie dla SMS-ów użytkowników zapisanych do usługi, integracją z Google Web Risk API i przekazywaniem bezpiecznych wiadomości do końcowego systemu.
+- Stan użytkowników przechowywany jest w Flink state joba "Phishing detection"
