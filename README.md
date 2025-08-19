@@ -30,7 +30,7 @@ Hipotetyczny operator telekomunikacyjny dogadał się ze związkiem banków, że
 - Jeśli przyjęto dodatkowe założenia, należy je opisać w pliku README.
 - Jednym z ocenianych elementów jest przyjęta architektura rozwiązania. Decyzje architektoniczne należy opisać w README.
 - Operatorowi zależy na szybkim czasie wdrożenia i niskim koszcie obsługi.
-## Proponowana architektura: Przetwarzanie strumieniowe z Apache Kafka i Apache Flink
+# Proponowana architektura: Przetwarzanie strumieniowe z Apache Kafka i Apache Flink
 
 **Założenia**
 * Detekcja phishingu jest wykonywana wyłącznie dla SMS-ów, których odbiorcy są zapisani do usługi antyphishingowej (opcja opt-in). Dla pozostałych użytkowników wiadomości są przekazywane bez dodatkowej analizy.
