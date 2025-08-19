@@ -38,8 +38,6 @@ Hipotetyczny operator telekomunikacyjny dogadał się ze związkiem banków, że
 * Korzystamy z "Flink State" ponieważ zależy nam na szybkości oraz nie chcemy narazie komplikować
   systemu i zwiększaść ilości zależności, przy wykorzystaniu zewenętrzej bazy
 
-![alt text](img/arch_sms.png)
-
 **Opis komponentów:**
 - **Kafka SMS Topic** – punkt wejścia dla wszystkich wiadomości SMS (JSON).
 - **Flink SMS Processing Job** – przetwarza strumień SMS, rozpoznaje komendy START/STOP, aktualizuje status użytkownika. Dla każdego SMS-a sprawdza, czy odbiorca jest zapisany do usługi:
@@ -54,7 +52,6 @@ Hipotetyczny operator telekomunikacyjny dogadał się ze związkiem banków, że
 
 ### Diagram architektur
 
-![alt text](img/arch_sms.png)
 
 ```mermaid
 flowchart LR
