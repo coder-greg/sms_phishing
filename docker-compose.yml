@@ -40,3 +40,28 @@ services:
       kafka-topics --create --if-not-exists --topic sms-out --bootstrap-server kafka:29092 --replication-factor 1 --partitions 1
       "
     restart: "no"
+
+  flink-jobmanager:
+    build:
+      context: .
+      dockerfile: docker/flink/Dockerfile
+    image: local/sms-flink:latest
+    container_name: flink-jobmanager
+    ports:
+      - "8081:8081"
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    command: jobmanager
+    depends_on:
+      - kafka
+
+  flink-taskmanager:
+    image: local/sms-flink:latest
+    container_name: flink-taskmanager
+    depends_on:
+      - flink-jobmanager
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    command: taskmanager

@@ -14,11 +14,14 @@ public class SmsFlinkJob {
         // Set up the execution environment
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
+        // Kafka bootstrap servers: overridable via env var KAFKA_BOOTSTRAP_SERVERS
+        final String kafkaBootstrap = System.getenv().getOrDefault("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092");
+
         // Kafka connectors configured via builder APIs (no Properties object required)
         
         // Kafka source: reads from "sms-in" topic (new Source API)
         KafkaSource<String> source = KafkaSource.<String>builder()
-                .setBootstrapServers("localhost:9092")
+                .setBootstrapServers(kafkaBootstrap)
                 .setTopics("sms-in")
                 .setGroupId("sms-flink-group")
                 .setStartingOffsets(OffsetsInitializer.earliest())
@@ -27,7 +30,7 @@ public class SmsFlinkJob {
 
         // Kafka sink: writes to "sms-out" topic (new Sink API)
         KafkaSink<String> sink = KafkaSink.<String>builder()
-                .setBootstrapServers("localhost:9092")
+                .setBootstrapServers(kafkaBootstrap)
                 .setRecordSerializer(
                         KafkaRecordSerializationSchema.<String>builder()
                                 .setTopic("sms-out")
