@@ -11,16 +11,16 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
 
   kafka:
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:5.5.1
     container_name: kafka
     ports:
-      - "9092:9092" 
+      - "9092:9092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
@@ -29,15 +29,21 @@ services:
       - zookeeper
 
   kafka-init:
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:5.5.1
     container_name: kafka-init
     depends_on:
       - kafka
     entrypoint: ["/bin/bash","-c"]
     command: >
       bash -lc "
-      kafka-topics --create --if-not-exists --topic sms-in --bootstrap-server kafka:29092 --replication-factor 1 --partitions 1 &&
-      kafka-topics --create --if-not-exists --topic sms-out --bootstrap-server kafka:29092 --replication-factor 1 --partitions 1
+      # wait for Kafka to be reachable before creating topics
+      for i in {1..60}; do
+        kafka-topics --bootstrap-server kafka:9092 --list >/dev/null 2>&1 && break
+        echo 'Waiting for Kafka to be ready... (attempt '\"$i\"')'
+        sleep 1
+      done
+      kafka-topics --create --topic sms-in --bootstrap-server kafka:9092 --replication-factor 1 --partitions 1
+      kafka-topics --create --topic sms-out --bootstrap-server kafka:9092 --replication-factor 1 --partitions 1
       "
     restart: "no"
 
@@ -51,17 +57,19 @@ services:
       - "8081:8081"
     environment:
       - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     command: jobmanager
     depends_on:
       - kafka
+      - kafka-init
 
   flink-taskmanager:
     image: local/sms-flink:latest
     container_name: flink-taskmanager
     depends_on:
       - flink-jobmanager
+      - kafka-init
     environment:
       - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     command: taskmanager

@@ -1,3 +1,5 @@
 sms-flink-job/target/*
 jobs/sms-flink-job/target/original-sms-flink-job-1.0-SNAPSHOT.jar
 **.jar
+**.class
+jobs/sms-flink-job/target/classes/pl/example/SmsFlinkJob.class

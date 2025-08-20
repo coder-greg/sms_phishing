@@ -61,7 +61,7 @@ $COMPOSE up kafka-init
 
 echo
 echo "[4/4] Starting Flink cluster (JobManager, TaskManager) ..."
-$COMPOSE up -d flink-jobmanager flink-taskmanager
+$COMPOSE up -d --force-recreate --no-deps flink-jobmanager flink-taskmanager
 
 cat << 'EOF'
 

@@ -15,7 +15,11 @@ public class SmsFlinkJob {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
         // Kafka bootstrap servers: overridable via env var KAFKA_BOOTSTRAP_SERVERS
-        final String kafkaBootstrap = System.getenv().getOrDefault("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092");
+        String kafkaBootstrap = System.getenv("KAFKA_BOOTSTRAP_SERVERS");
+        if (kafkaBootstrap == null || kafkaBootstrap.trim().isEmpty()) {
+            kafkaBootstrap = "kafka:29092";
+        }
+        System.out.println("Using Kafka bootstrap servers: " + kafkaBootstrap);
 
         // Kafka connectors configured via builder APIs (no Properties object required)
         
