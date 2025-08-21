@@ -28,25 +28,6 @@ services:
     depends_on:
       - zookeeper
 
-  # kafka-init:
-  #   image: confluentinc/cp-kafka:5.5.1
-  #   container_name: kafka-init
-  #   depends_on:
-  #     - kafka
-  #   entrypoint: ["/bin/bash","-c"]
-  #   command: >
-  #     bash -lc "
-  #     # wait for Kafka to be reachable before creating topics
-  #     for i in {1..60}; do
-  #       kafka-topics --bootstrap-server kafka:9092 --list >/dev/null 2>&1 && break
-  #       echo 'Waiting for Kafka to be ready... (attempt '\"$i\"')'
-  #       sleep 1
-  #     done
-  #     kafka-topics --create --topic sms-in --bootstrap-server kafka:9092 --replication-factor 1 --partitions 1
-  #     kafka-topics --create --topic sms-out --bootstrap-server kafka:9092 --replication-factor 1 --partitions 1
-  #     "
-  #   restart: "no"
-
   flink-jobmanager:
     build:
       context: .

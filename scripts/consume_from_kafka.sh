@@ -5,7 +5,12 @@ set -euo pipefail
 #   ./scripts/consume_from_kafka.sh [topic]
 #   # Defaults to sms-in if no topic is given
 
-TOPIC="${1:-sms-in}"
+if [ $# -lt 1 ]; then
+  echo "Usage: $0 <topic>"
+  exit 1
+fi
+
+TOPIC="$1"
 KAFKA_CONTAINER="kafka"
 BROKER="kafka:9092"
 
