@@ -39,16 +39,34 @@ services:
     environment:
       - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     command: jobmanager
     depends_on:
       - kafka
+      - redis
 
   flink-taskmanager:
     image: local/sms-flink:latest
     container_name: flink-taskmanager
     depends_on:
       - flink-jobmanager
+      - redis
     environment:
       - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     command: taskmanager
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped

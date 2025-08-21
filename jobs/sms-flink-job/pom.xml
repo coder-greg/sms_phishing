@@ -45,6 +45,12 @@
             <version>2.15.2</version>
         </dependency>
     </dependencies>
+       <!-- Redis client for Java -->
+       <dependency>
+           <groupId>redis.clients</groupId>
+           <artifactId>jedis</artifactId>
+           <version>4.4.3</version>
+       </dependency>
     <build>
         <plugins>
             <!-- Ensure Java 11 bytecode -->

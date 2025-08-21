@@ -12,21 +12,35 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import redis.clients.jedis.Jedis;
+
 public class SmsFlinkJob {
     public static void main(String[] args) throws Exception {
-        // Set up the execution environment
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        // Kafka bootstrap servers: overridable via env var KAFKA_BOOTSTRAP_SERVERS
         String kafkaBootstrap = System.getenv("KAFKA_BOOTSTRAP_SERVERS");
         if (kafkaBootstrap == null || kafkaBootstrap.trim().isEmpty()) {
             kafkaBootstrap = "kafka:29092";
         }
         System.out.println("Using Kafka bootstrap servers: " + kafkaBootstrap);
 
-        // Kafka connectors configured via builder APIs (no Properties object required)
-        
-        // Kafka source: reads from "sms-in" topic (new Source API)
+        // Redis connection info from env
+        String redisHost = System.getenv("REDIS_HOST");
+        String redisPortStr = System.getenv("REDIS_PORT");
+        int redisPort = 6379;
+        if (redisHost == null || redisHost.trim().isEmpty()) {
+            redisHost = "redis";
+        }
+        if (redisPortStr != null && !redisPortStr.trim().isEmpty()) {
+            try {
+                redisPort = Integer.parseInt(redisPortStr);
+            } catch (NumberFormatException e) {
+                System.err.println("Invalid REDIS_PORT, using default 6379");
+            }
+        }
+        final String finalRedisHost = redisHost;
+        final int finalRedisPort = redisPort;
+
         KafkaSource<String> source = KafkaSource.<String>builder()
                 .setBootstrapServers(kafkaBootstrap)
                 .setTopics("sms-in")
@@ -35,7 +49,6 @@ public class SmsFlinkJob {
                 .setValueOnlyDeserializer(new SimpleStringSchema())
                 .build();
 
-        // Kafka sink: writes to "sms-out" topic (new Sink API)
         KafkaSink<String> sink = KafkaSink.<String>builder()
                 .setBootstrapServers(kafkaBootstrap)
                 .setRecordSerializer(
@@ -47,7 +60,6 @@ public class SmsFlinkJob {
                 .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
                 .build();
 
-        // Stream pipeline: read from Kafka, log, write to Kafka
         env
             .fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source: sms-in")
             .uid("kafka-source")
@@ -57,22 +69,37 @@ public class SmsFlinkJob {
 
                 // Parse JSON and extract fields
                 ObjectMapper mapper = new ObjectMapper();
-                try {
+                try (Jedis jedis = new Jedis(finalRedisHost, finalRedisPort)) {
                     JsonNode root = mapper.readTree(value);
                     String sender = root.path("sender").asText(null);
                     String recipient = root.path("recipient").asText(null);
                     String message = root.path("message").asText(null);
+                    String action = root.path("action").asText(null); // "opt_in" or "opt_out"
 
                     // Example action: log extracted fields
                     System.out.println("Extracted SMS fields:");
                     System.out.println("  sender: " + sender);
                     System.out.println("  recipient: " + recipient);
                     System.out.println("  message: " + message);
+                    System.out.println("  action: " + action);
 
-                    // TODO: Replace this with your business logic as needed
+                    // Business logic: opt-in/opt-out using Redis set
+                    String setKey = "subscribed_users";
+                    if (sender != null && action != null) {
+                        if (action.equalsIgnoreCase("opt_in")) {
+                            jedis.sadd(setKey, sender);
+                            System.out.println("Opt-in: added " + sender + " to " + setKey);
+                        } else if (action.equalsIgnoreCase("opt_out")) {
+                            jedis.srem(setKey, sender);
+                            System.out.println("Opt-out: removed " + sender + " from " + setKey);
+                        }
+                        // Optionally, you can check membership:
+                        boolean isSubscribed = jedis.sismember(setKey, sender);
+                        System.out.println("Is " + sender + " subscribed? " + isSubscribed);
+                    }
 
                 } catch (Exception e) {
-                    System.err.println("Failed to parse SMS JSON: " + e.getMessage());
+                    System.err.println("Failed to process SMS or Redis: " + e.getMessage());
                 }
                 return value;
             })
