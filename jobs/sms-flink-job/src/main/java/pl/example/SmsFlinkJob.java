@@ -49,7 +49,8 @@ public class SmsFlinkJob {
             .fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source: sms-in")
             .uid("kafka-source")
             .map(value -> {
-                System.out.println("Received: " + value);
+                // Log when SMS is pulled from sms-in topic
+                System.out.println("Pulled from sms-in: " + value);
                 return value;
             })
             .name("Logger")
