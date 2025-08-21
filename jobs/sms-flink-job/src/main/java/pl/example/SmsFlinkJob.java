@@ -9,6 +9,9 @@ import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 public class SmsFlinkJob {
     public static void main(String[] args) throws Exception {
         // Set up the execution environment
@@ -51,6 +54,26 @@ public class SmsFlinkJob {
             .map(value -> {
                 // Log when SMS is pulled from sms-in topic
                 System.out.println("Pulled from sms-in: " + value);
+
+                // Parse JSON and extract fields
+                ObjectMapper mapper = new ObjectMapper();
+                try {
+                    JsonNode root = mapper.readTree(value);
+                    String sender = root.path("sender").asText(null);
+                    String recipient = root.path("recipient").asText(null);
+                    String message = root.path("message").asText(null);
+
+                    // Example action: log extracted fields
+                    System.out.println("Extracted SMS fields:");
+                    System.out.println("  sender: " + sender);
+                    System.out.println("  recipient: " + recipient);
+                    System.out.println("  message: " + message);
+
+                    // TODO: Replace this with your business logic as needed
+
+                } catch (Exception e) {
+                    System.err.println("Failed to parse SMS JSON: " + e.getMessage());
+                }
                 return value;
             })
             .name("Logger")
