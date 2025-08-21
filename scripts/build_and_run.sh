@@ -17,7 +17,7 @@ else
   exit 1
 fi
 
-echo "[1/4] Building Maven jobs under jobs/* ..."
+echo "[1/5] Building Maven jobs under jobs/* ..."
 mkdir -p "$DIST"
 rm -rf "$DIST"/*
 
@@ -51,16 +51,37 @@ if [[ $found_modules -eq 0 ]]; then
 fi
 
 echo
-echo "[2/4] Building custom Flink image with bundled jobs (local/sms-flink:latest) ..."
+echo "[2/5] Building custom Flink image with bundled jobs (local/sms-flink:latest) ..."
 $COMPOSE build --pull flink-jobmanager
 
 echo
-echo "[3/4] Starting Kafka stack (Zookeeper, Kafka) and initializing topics ..."
+echo "[3/5] Starting Kafka stack (Zookeeper, Kafka) and initializing topics ..."
 $COMPOSE up -d zookeeper kafka
-$COMPOSE up kafka-init
+
+# Wait for Kafka to be ready
+echo "Waiting for Kafka broker to be available on localhost:9092 ..."
+for i in {1..30}; do
+  if docker exec kafka kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1; then
+    echo "Kafka is up!"
+    break
+  else
+    echo "Kafka not ready yet, retrying in 2s..."
+    sleep 2
+  fi
+  if [ "$i" -eq 30 ]; then
+    echo "ERROR: Kafka did not become ready in time."
+    exit 1
+  fi
+done
+
+docker exec -it kafka kafka-topics --create --topic sms-in --bootstrap-server localhost:9092 --replication-factor 1 --partitions 1 || true
+docker exec -it kafka kafka-topics --create --topic sms-out --bootstrap-server localhost:9092 --replication-factor 1 --partitions 1 || true
+
+echo "[4/5] Created kafka topics"
+docker exec -it kafka kafka-topics --bootstrap-server localhost:9092 --list
 
 echo
-echo "[4/4] Starting Flink cluster (JobManager, TaskManager) ..."
+echo "[5/5] Starting Flink cluster (JobManager, TaskManager) ..."
 $COMPOSE up -d --force-recreate --no-deps flink-jobmanager flink-taskmanager
 
 cat << 'EOF'
