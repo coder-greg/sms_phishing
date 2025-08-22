@@ -27,17 +27,7 @@ public class UserStateManagementJob {
         // Redis connection info from env
         String redisHost = System.getenv("REDIS_HOST");
         String redisPortStr = System.getenv("REDIS_PORT");
-        int redisPort = 6379;
-        if (redisHost == null || redisHost.trim().isEmpty()) {
-            redisHost = "redis";
-        }
-        if (redisPortStr != null && !redisPortStr.trim().isEmpty()) {
-            try {
-                redisPort = Integer.parseInt(redisPortStr);
-            } catch (NumberFormatException e) {
-                System.err.println("Invalid REDIS_PORT, using default 6379");
-            }
-        }
+        int redisPort = Integer.parseInt(redisPortStr);
         final String finalRedisHost = redisHost;
         final int finalRedisPort = redisPort;
 
