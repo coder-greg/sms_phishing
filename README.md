@@ -38,33 +38,33 @@ Hipotetyczny operator telekomunikacyjny dogadał się ze związkiem banków, że
 * Do przechowywania statusu opt-in/opt-out użytkowników korzystamy z bazy Redis, co pozwala na szybki dostęp i prostą integrację z Flinkiem.
 
 **Opis komponentów:**
-- **Kafka SMS Topic** – punkt wejścia dla wszystkich wiadomości SMS (JSON).
+- **Kafka sms-in Topic** – punkt wejścia dla wszystkich wiadomości SMS (JSON).
 - **Flink SMS Processing Job** – przetwarza strumień SMS, rozpoznaje komendy START/STOP, aktualizuje status użytkownika. Dla każdego SMS-a sprawdza, czy odbiorca jest zapisany do usługi:
-    - Jeśli TAK: przekazuje wiadomość do dalszej analizy phishingu.
-    - Jeśli NIE: przekazuje wiadomość bezpośrednio do dostarczenia (bez analizy phishingu).
+    - Jeśli TAK: przekazuje wiadomość do dalszej analizy phishingu poprze wrzucenie ich do topicku  "sms-for-phishing"
+    - Jeśli NIE: przekazuje wiadomość bezpośrednio do dostarczenia (bez analizy phishingu). "sms-out"
 - **User Subscription State Store** – przechowuje status opt-in/opt-out użytkowników w bazie Redis.
 - **Flink Phishing Detection Job** – analizuje tylko SMS-y użytkowników zapisanych do usługi, sprawdza linki przez Google Web Risk API, przekazuje czyste wiadomości dalej.
-- **Google Web Risk API** – sprawdza podejrzane linki, z cache’owaniem wyników dla ograniczenia kosztów.
-- **Kafka Clean-SMS Topic** – temat dla zweryfikowanych, bezpiecznych wiadomości oraz tych, które nie wymagają analizy (użytkownicy nie zapisani).
+- **Google Web Risk API** – sprawdza podejrzane linki
+- **Kafka sms-out Topic** – temat dla zweryfikowanych, bezpiecznych wiadomości oraz tych, które nie wymagają analizy (użytkownicy nie zapisani).
+- **Kafka sms-for-phishing Topic** – temat dla wiadomości do weryfikacji
+- **Kafka sms-scam Topic** – temat dla wiadomości będących potencjalny phishing
 - **SMS Delivery System** – system końcowy dostarczający SMS do odbiorcy.
-- **Alerting/Logging** – obsługa przypadków phishingu (logi, alerty).
 
 ### Diagram architektur
 
 
 ```mermaid
 flowchart LR
-    A[SMS Producer] --> B[Kafka SMS Topic]
-    B --> C[Flink Job: User State Management]
-    C -->|START/STOP| D[Flink State: User Subscription]
-    C -->|SMS od użytkownika zapisany?| E[Kafka Filtered-SMS Topic]
-    C -->|SMS od użytkownika NIEzapisany| H[Kafka Clean-SMS Topic]
-    E --> F[Flink Job: Phishing Detection]
-    F -->|Phishing Check| G[Google Web Risk API]
-    F -->|Cache hit| K[Cache w pamięci Flinka]
-    F -->|Clean SMS| H
-    H --> I[SMS Delivery System]
-    F -->|Blocked/Phishing| J[Alerting/Logging]
+    A[SMS Producer] --> B[Kafka sms-in Topic]
+    B --> C[Flink SMS Processing Job]
+    C -->|START/STOP| D[Redis: User Subscription State]
+    C -->|SMS zapisany| E[Kafka sms-for-phishing Topic]
+    C -->|SMS niezapisany| F[Kafka sms-out Topic]
+    E --> G[Flink Phishing Detection Job]
+    G -->|Phishing Check| H[Google Web Risk API]
+    G -->|Wiadomość OK| F
+    G -->|Phishing| I[Kafka sms-scam Topic]
+    F --> J[SMS Delivery System]
 ```
 
 **Opis:**
