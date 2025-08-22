@@ -35,15 +35,14 @@ Hipotetyczny operator telekomunikacyjny dogadał się ze związkiem banków, że
 **Założenia**
 * Detekcja phishingu jest wykonywana wyłącznie dla SMS-ów, których odbiorcy są zapisani do usługi antyphishingowej (opcja opt-in). Dla pozostałych użytkowników wiadomości są przekazywane bez dodatkowej analizy.
 * System korzysta z cache przy sprawdzaniu linków z racji tego że API kosztuje oraz ze zwględu na wydajność. Nie chcemy sprawdzać w zewnętrzym API więcej niż raz tych samych linków
-* Korzystamy z "Flink State" ponieważ zależy nam na szybkości oraz nie chcemy narazie komplikować
-  systemu i zwiększaść ilości zależności, przy wykorzystaniu zewenętrzej bazy
+* Do przechowywania statusu opt-in/opt-out użytkowników korzystamy z bazy Redis, co pozwala na szybki dostęp i prostą integrację z Flinkiem.
 
 **Opis komponentów:**
 - **Kafka SMS Topic** – punkt wejścia dla wszystkich wiadomości SMS (JSON).
 - **Flink SMS Processing Job** – przetwarza strumień SMS, rozpoznaje komendy START/STOP, aktualizuje status użytkownika. Dla każdego SMS-a sprawdza, czy odbiorca jest zapisany do usługi:
     - Jeśli TAK: przekazuje wiadomość do dalszej analizy phishingu.
     - Jeśli NIE: przekazuje wiadomość bezpośrednio do dostarczenia (bez analizy phishingu).
-- **User Subscription State Store** – przechowuje status opt-in/opt-out użytkowników (np. Flink state, Redis, baza SQL).
+- **User Subscription State Store** – przechowuje status opt-in/opt-out użytkowników w bazie Redis.
 - **Flink Phishing Detection Job** – analizuje tylko SMS-y użytkowników zapisanych do usługi, sprawdza linki przez Google Web Risk API, przekazuje czyste wiadomości dalej.
 - **Google Web Risk API** – sprawdza podejrzane linki, z cache’owaniem wyników dla ograniczenia kosztów.
 - **Kafka Clean-SMS Topic** – temat dla zweryfikowanych, bezpiecznych wiadomości oraz tych, które nie wymagają analizy (użytkownicy nie zapisani).
@@ -62,7 +61,7 @@ flowchart LR
     C -->|SMS od użytkownika NIEzapisany| H[Kafka Clean-SMS Topic]
     E --> F[Flink Job: Phishing Detection]
     F -->|Phishing Check| G[Google Web Risk API]
-    F -->|Cache hit| K[Flink State: Link Cache]
+    F -->|Cache hit| K[Cache w pamięci Flinka]
     F -->|Clean SMS| H
     H --> I[SMS Delivery System]
     F -->|Blocked/Phishing| J[Alerting/Logging]
@@ -73,4 +72,21 @@ flowchart LR
     - Jeśli TAK: przekazuje SMS do kolejnego joba (detekcja phishingu).
     - Jeśli NIE: przekazuje SMS bezpośrednio do dostarczenia (bez analizy phishingu).
 - Drugi job Flinka zajmuje się detekcją phishingu wyłącznie dla SMS-ów użytkowników zapisanych do usługi, integracją z Google Web Risk API i przekazywaniem bezpiecznych wiadomości do końcowego systemu.
-- Stan użytkowników przechowywany jest w Flink state joba "Phishing detection"
+- Stan użytkowników przechowywany jest w bazie Redis.
+
+# Instrukcja uruchomienia
+
+Aby uruchomić projekt, wykonaj skrypt:
+
+```bash
+./scripts/build_and_run.sh
+```
+
+**Wymagania:**
+- Plik z poświadczeniami Google Web Risk (`webrisk-key.json`) musi być umieszczony zarówno w katalogu `secrets`, jak i w katalogu głównym projektu.
+
+Przykład:
+- `secrets/webrisk-key.json`
+- `./webrisk-key.json`
+
+Plik ten jest wymagany do poprawnego działania integracji z Google Web Risk API.
