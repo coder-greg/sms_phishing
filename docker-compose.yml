@@ -30,11 +30,14 @@ services:
 
   flink-jobmanager:
     image: local/sms-flink:latest
+    build:
+      context: .
+      dockerfile: docker/flink/Dockerfile
     ports:
       - "8081:8081"
     command: jobmanager
     volumes:
-      - ./webrisk-key.json:/secrets/webrisk-key.json:ro
+      - ./secrets/webrisk-key.json:/secrets/webrisk-key.json:ro
     environment:
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092

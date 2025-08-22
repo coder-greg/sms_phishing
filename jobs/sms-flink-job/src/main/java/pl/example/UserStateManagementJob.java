@@ -47,7 +47,6 @@ public class UserStateManagementJob {
     }
 
 
-
     public static void main(String[] args) throws Exception {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
