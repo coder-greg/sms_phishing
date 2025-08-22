@@ -56,7 +56,7 @@ $COMPOSE build --pull flink-jobmanager
 
 echo
 echo "[3/5] Starting Kafka stack (Zookeeper, Kafka) and Redis, and initializing topics ..."
-$COMPOSE up -d zookeeper kafka redis
+$COMPOSE up -d zookeeper kafka redis kafka-ui
 
 echo "Waiting for Kafka broker to be available on localhost:9092 ..."
 for i in {1..30}; do
@@ -113,11 +113,7 @@ cat << 'EOF'
 Done.
 
 Flink UI:
-  localhost:8081
+  http://localhost:8081
 
-Useful commands:
-  # List running jobs
-  docker exec -it flink-jobmanager /opt/flink/bin/flink list -m localhost:8081
-
-  # Tail TaskManager logs
-  docker logs -f flink-taskmanager
+Kafka UI:
+ http://localhost:8080 
