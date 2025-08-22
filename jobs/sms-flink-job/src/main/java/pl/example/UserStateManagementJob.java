@@ -14,15 +14,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import redis.clients.jedis.Jedis;
 
-public class SmsFlinkJob {
+public class UserStateManagementJob {
     public static void main(String[] args) throws Exception {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
         String kafkaBootstrap = System.getenv("KAFKA_BOOTSTRAP_SERVERS");
-        if (kafkaBootstrap == null || kafkaBootstrap.trim().isEmpty()) {
-            kafkaBootstrap = "kafka:29092";
-        }
         System.out.println("Using Kafka bootstrap servers: " + kafkaBootstrap);
+        String serviceNumber = System.getenv("SERVICE_NUMBER");
+        System.out.println("Service number for opt-in/opt-out: " + serviceNumber);
+        final String finalServiceNumber = serviceNumber;
 
         // Redis connection info from env
         String redisHost = System.getenv("REDIS_HOST");
@@ -64,40 +64,43 @@ public class SmsFlinkJob {
             .fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source: sms-in")
             .uid("kafka-source")
             .map(value -> {
-                // Log when SMS is pulled from sms-in topic
                 System.out.println("Pulled from sms-in: " + value);
 
-                // Parse JSON and extract fields
                 ObjectMapper mapper = new ObjectMapper();
                 try (Jedis jedis = new Jedis(finalRedisHost, finalRedisPort)) {
                     JsonNode root = mapper.readTree(value);
                     String sender = root.path("sender").asText(null);
                     String recipient = root.path("recipient").asText(null);
                     String message = root.path("message").asText(null);
-                    String action = root.path("action").asText(null); // "opt_in" or "opt_out"
+                    if (recipient == null || !recipient.equals(finalServiceNumber)) {
+                        System.out.println("Skipping message: recipient " + recipient + " does not match service number " + finalServiceNumber);
+                        return value;
+                    }
 
-                    // Example action: log extracted fields
                     System.out.println("Extracted SMS fields:");
                     System.out.println("  sender: " + sender);
                     System.out.println("  recipient: " + recipient);
                     System.out.println("  message: " + message);
-                    System.out.println("  action: " + action);
 
-                    // Business logic: opt-in/opt-out using Redis set
-                    String setKey = "subscribed_users";
-                    if (sender != null && action != null) {
-                        if (action.equalsIgnoreCase("opt_in")) {
-                            jedis.sadd(setKey, sender);
-                            System.out.println("Opt-in: added " + sender + " to " + setKey);
-                        } else if (action.equalsIgnoreCase("opt_out")) {
-                            jedis.srem(setKey, sender);
-                            System.out.println("Opt-out: removed " + sender + " from " + setKey);
+                    String subscribedSetKey = "subscribed_numbers";
+                    if (message != null) {
+                        if ("START".equalsIgnoreCase(message.trim())) {
+                            Long added = jedis.sadd(subscribedSetKey, sender);
+                            if (added != null && added > 0) {
+                                System.out.println("Added " + sender + " to subscribed numbers.");
+                            } else {
+                                System.out.println(sender + " was already subscribed.");
+                            }
+                        } else if ("STOP".equalsIgnoreCase(message.trim())) {
+                            Long removed = jedis.srem(subscribedSetKey, sender);
+                            if (removed != null && removed > 0) {
+                                System.out.println("Removed " + sender + " from subscribed numbers.");
+                            } else {
+                                System.out.println(sender + " was not subscribed.");
+                            }
                         }
-                        // Optionally, you can check membership:
-                        boolean isSubscribed = jedis.sismember(setKey, sender);
-                        System.out.println("Is " + sender + " subscribed? " + isSubscribed);
                     }
-
+ 
                 } catch (Exception e) {
                     System.err.println("Failed to process SMS or Redis: " + e.getMessage());
                 }

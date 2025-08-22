@@ -44,13 +44,13 @@
             <artifactId>jackson-databind</artifactId>
             <version>2.15.2</version>
         </dependency>
-    </dependencies>
        <!-- Redis client for Java -->
        <dependency>
            <groupId>redis.clients</groupId>
            <artifactId>jedis</artifactId>
            <version>4.4.3</version>
        </dependency>
+    </dependencies>
     <build>
         <plugins>
             <!-- Ensure Java 11 bytecode -->
@@ -77,7 +77,7 @@
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>pl.example.SmsFlinkJob</mainClass>
+                                    <mainClass>pl.example.UserStateManagementJob</mainClass>
                                 </transformer>
                             </transformers>
                             <!-- Exclude signature files to avoid warnings; keep Flink provided on cluster -->
