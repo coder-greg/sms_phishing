@@ -33,12 +33,15 @@ services:
     ports:
       - "8081:8081"
     command: jobmanager
+    volumes:
+      - ./webrisk-key.json:/secrets/webrisk-key.json:ro
     environment:
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       SERVICE_NUMBER: "48123456789"
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/webrisk-key.json
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
         restart-strategy: fixed-delay
@@ -51,11 +54,14 @@ services:
       - flink-jobmanager
       - redis
     command: taskmanager
+    volumes:
+      - ./webrisk-key.json:/secrets/webrisk-key.json:ro
     environment:
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/webrisk-key.json
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
         taskmanager.numberOfTaskSlots: 4
