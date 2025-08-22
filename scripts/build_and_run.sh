@@ -17,36 +17,30 @@ else
   exit 1
 fi
 
-echo "[1/5] Building Maven jobs under jobs/* ..."
+echo "[1/5] Building Maven job: jobs/sms-flink-job ..."
 mkdir -p "$DIST"
 rm -rf "$DIST"/*
 
-shopt -s nullglob
-found_modules=0
-for module in "$ROOT_DIR"/jobs/*; do
-  if [[ -d "$module" && -f "$module/pom.xml" ]]; then
-    found_modules=$((found_modules+1))
-    name="$(basename "$module")"
-    echo " - Building $name"
-    (cd "$module" && mvn -DskipTests clean package)
+MODULE="$ROOT_DIR/jobs/sms-flink-job"
+if [[ -d "$MODULE" && -f "$MODULE/pom.xml" ]]; then
+  echo " - Building sms-flink-job"
+  (cd "$MODULE" && mvn -DskipTests clean package)
 
-    any=0
-    for jar in "$module"/target/*.jar; do
-      base="$(basename "$jar")"
-      if [[ "$base" == original-* ]]; then
-        continue
-      fi
-      any=1
-      cp "$jar" "$DIST/${name}--$base"
-      echo "   > Collected: ${name}--$base"
-    done
-    if [[ $any -eq 0 ]]; then
-      echo "   ! WARN: No non-original jars found in $module/target"
+  any=0
+  for jar in "$MODULE"/target/*.jar; do
+    base="$(basename "$jar")"
+    if [[ "$base" == original-* ]]; then
+      continue
     fi
+    any=1
+    cp "$jar" "$DIST/sms-flink-job--$base"
+    echo "   > Collected: sms-flink-job--$base"
+  done
+  if [[ $any -eq 0 ]]; then
+    echo "   ! WARN: No non-original jars found in $MODULE/target"
   fi
-done
-if [[ $found_modules -eq 0 ]]; then
-  echo "ERROR: No Maven modules found in jobs/* (missing pom.xml?)."
+else
+  echo "ERROR: Maven module jobs/sms-flink-job not found or missing pom.xml."
   exit 1
 fi
 
@@ -100,6 +94,8 @@ recreate_kafka_topic() {
 
 recreate_kafka_topic "sms-in"
 recreate_kafka_topic "sms-out"
+recreate_kafka_topic "sms-for-phishing"
+recreate_kafka_topic "sms-scam"
 
 echo "[4/5] Recreated kafka topics"
 docker exec -it kafka kafka-topics --bootstrap-server localhost:9092 --list

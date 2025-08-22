@@ -15,6 +15,39 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import redis.clients.jedis.Jedis;
 
 public class UserStateManagementJob {
+
+    private static void handleOptInOptOut(Jedis jedis, String sender, String message, String subscribedSetKey) {
+        if (message == null) {
+            return ;
+        }
+        if ("START".equalsIgnoreCase(message.trim())) {
+            Long added = jedis.sadd(subscribedSetKey, sender);
+            if (added != null && added > 0) {
+                System.out.println("Added " + sender + " to subscribed numbers.");
+            } else {
+                System.out.println(sender + " was already subscribed.");
+            }
+        } else if ("STOP".equalsIgnoreCase(message.trim())) {
+            Long removed = jedis.srem(subscribedSetKey, sender);
+            if (removed != null && removed > 0) {
+                System.out.println("Removed " + sender + " from subscribed numbers.");
+            } else {
+                System.out.println(sender + " was not subscribed.");
+            }
+        }
+    }
+
+    static class RoutedMessage {
+        public String route;
+        public String value;
+        public RoutedMessage(String route, String value) {
+            this.route = route;
+            this.value = value;
+        }
+    }
+
+
+
     public static void main(String[] args) throws Exception {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
@@ -24,7 +57,6 @@ public class UserStateManagementJob {
         System.out.println("Service number for opt-in/opt-out: " + serviceNumber);
         final String finalServiceNumber = serviceNumber;
 
-        // Redis connection info from env
         String redisHost = System.getenv("REDIS_HOST");
         String redisPortStr = System.getenv("REDIS_PORT");
         int redisPort = Integer.parseInt(redisPortStr);
@@ -50,13 +82,24 @@ public class UserStateManagementJob {
                 .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
                 .build();
 
-        env
+        KafkaSink<String> phishingSink = KafkaSink.<String>builder()
+                .setBootstrapServers(kafkaBootstrap)
+                .setRecordSerializer(
+                        KafkaRecordSerializationSchema.<String>builder()
+                                .setTopic("sms-for-phishing")
+                                .setValueSerializationSchema(new SimpleStringSchema())
+                                .build()
+                )
+                .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
+                .build();
+
+        var routedStream = env
             .fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source: sms-in")
             .uid("kafka-source")
-            .map(value -> {
+            .flatMap((String value, org.apache.flink.util.Collector<RoutedMessage> out) -> {
                 System.out.println("Pulled from sms-in: [" + value + "]");
                 System.out.println("Raw message length: " + (value != null ? value.length() : "null"));
-
+        
                 ObjectMapper mapper = new ObjectMapper();
                 try (Jedis jedis = new Jedis(finalRedisHost, finalRedisPort)) {
                     System.out.println("About to parse JSON...");
@@ -66,8 +109,9 @@ public class UserStateManagementJob {
                     String recipient = root.path("recipient").asText(null);
                     String message = root.path("message").asText(null);
                     if (recipient == null || !recipient.equals(finalServiceNumber)) {
-                        System.out.println("Skipping message: recipient " + recipient + " does not match service number " + finalServiceNumber);
-                        return value;
+                        System.out.println("Recipient " + recipient + " does not match service number " + finalServiceNumber + ", routing to sms-out.");
+                        out.collect(new RoutedMessage("out", value));
+                        return;
                     }
 
                     System.out.println("Extracted SMS fields:");
@@ -76,37 +120,38 @@ public class UserStateManagementJob {
                     System.out.println("  message: " + message);
 
                     String subscribedSetKey = "subscribed_numbers";
-                    if (message != null) {
-                        if ("START".equalsIgnoreCase(message.trim())) {
-                            Long added = jedis.sadd(subscribedSetKey, sender);
-                            if (added != null && added > 0) {
-                                System.out.println("Added " + sender + " to subscribed numbers.");
-                            } else {
-                                System.out.println(sender + " was already subscribed.");
-                            }
-                        } else if ("STOP".equalsIgnoreCase(message.trim())) {
-                            Long removed = jedis.srem(subscribedSetKey, sender);
-                            if (removed != null && removed > 0) {
-                                System.out.println("Removed " + sender + " from subscribed numbers.");
-                            } else {
-                                System.out.println(sender + " was not subscribed.");
-                            }
-                        }
+                    boolean isSubscribed = jedis.sismember(subscribedSetKey, recipient);
+
+                    handleOptInOptOut(jedis, sender, message, subscribedSetKey);
+                    if (isSubscribed) {
+                        out.collect(new RoutedMessage("phishing", value));
+                    } else {
+                        out.collect(new RoutedMessage("out", value));
                     }
- 
                 } catch (Exception e) {
                     System.err.println("Failed to process SMS or Redis: " + e.getMessage());
                     e.printStackTrace(System.err);
                     System.err.println("Raw value that caused error: [" + value + "]");
                 }
-                return value;
             })
-            .name("Logger")
-            .uid("logger")
+            .returns(UserStateManagementJob.RoutedMessage.class)
+            .name("Router")
+            .uid("router");
+
+        routedStream
+            .filter(rm -> "out".equals(rm.route))
+            .map(rm -> rm.value)
             .sinkTo(sink)
             .name("Kafka Sink: sms-out")
             .uid("kafka-sink");
 
-        env.execute("SMS Flink Kafka Pass-Through Job");
+        routedStream
+            .filter(rm -> "phishing".equals(rm.route))
+            .map(rm -> rm.value)
+            .sinkTo(phishingSink)
+            .name("Kafka Sink: sms-for-phishing")
+            .uid("phishing-kafka-sink");
+
+        env.execute("User State Management Job");
     }
 }

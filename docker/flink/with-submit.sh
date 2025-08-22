@@ -27,16 +27,18 @@ submit_jobs() {
   fi
 
   for jar in "${jars[@]}"; do
-    echo "[with-submit] Submitting job: $jar"
-    # Submit into the session cluster on the local JM REST endpoint
-    /opt/flink/bin/flink run -d -m localhost:8081 "$jar" || {
-      echo "[with-submit] WARNING: Submission failed for $jar" >&2
+    echo "[with-submit] Submitting job: $jar (UserStateManagementJob)"
+    /opt/flink/bin/flink run -d -m localhost:8081 -c pl.example.UserStateManagementJob "$jar" || {
+      echo "[with-submit] WARNING: Submission failed for $jar (UserStateManagementJob)" >&2
+    }
+    echo "[with-submit] Submitting job: $jar (PhishingDetectionJob)"
+    /opt/flink/bin/flink run -d -m localhost:8081 -c pl.example.PhishingDetectionJob "$jar" || {
+      echo "[with-submit] WARNING: Submission failed for $jar (PhishingDetectionJob)" >&2
     }
   done
 }
 
 if [[ "$ROLE" == "jobmanager" ]]; then
-  # Run submitter in background, then start JM in foreground
   ( submit_jobs ) &
   exec "$ORIG_ENTRYPOINT" "$@"
 else
