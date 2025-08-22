@@ -64,11 +64,14 @@ public class UserStateManagementJob {
             .fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source: sms-in")
             .uid("kafka-source")
             .map(value -> {
-                System.out.println("Pulled from sms-in: " + value);
+                System.out.println("Pulled from sms-in: [" + value + "]");
+                System.out.println("Raw message length: " + (value != null ? value.length() : "null"));
 
                 ObjectMapper mapper = new ObjectMapper();
                 try (Jedis jedis = new Jedis(finalRedisHost, finalRedisPort)) {
+                    System.out.println("About to parse JSON...");
                     JsonNode root = mapper.readTree(value);
+                    System.out.println("Parsed JSON successfully: " + root.toString());
                     String sender = root.path("sender").asText(null);
                     String recipient = root.path("recipient").asText(null);
                     String message = root.path("message").asText(null);
@@ -103,6 +106,8 @@ public class UserStateManagementJob {
  
                 } catch (Exception e) {
                     System.err.println("Failed to process SMS or Redis: " + e.getMessage());
+                    e.printStackTrace(System.err);
+                    System.err.println("Raw value that caused error: [" + value + "]");
                 }
                 return value;
             })
