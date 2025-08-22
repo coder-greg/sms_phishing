@@ -16,8 +16,8 @@ import redis.clients.jedis.Jedis;
 
 public class UserStateManagementJob {
 
-    private static void handleOptInOptOut(Jedis jedis, String sender, String message, String subscribedSetKey) {
-        if (message == null) {
+    private static void handleOptInOptOut(Jedis jedis, String sender,  String message, String subscribedSetKey) {
+        if (message == null ) {
             return ;
         }
         if ("START".equalsIgnoreCase(message.trim())) {
@@ -108,11 +108,6 @@ public class UserStateManagementJob {
                     String sender = root.path("sender").asText(null);
                     String recipient = root.path("recipient").asText(null);
                     String message = root.path("message").asText(null);
-                    if (recipient == null || !recipient.equals(finalServiceNumber)) {
-                        System.out.println("Recipient " + recipient + " does not match service number " + finalServiceNumber + ", routing to sms-out.");
-                        out.collect(new RoutedMessage("out", value));
-                        return;
-                    }
 
                     System.out.println("Extracted SMS fields:");
                     System.out.println("  sender: " + sender);
@@ -121,8 +116,11 @@ public class UserStateManagementJob {
 
                     String subscribedSetKey = "subscribed_numbers";
                     boolean isSubscribed = jedis.sismember(subscribedSetKey, recipient);
+                    System.out.println("User is subscribed: " + isSubscribed);
 
-                    handleOptInOptOut(jedis, sender, message, subscribedSetKey);
+                    if (recipient != null && recipient.equals(finalServiceNumber)) {
+                        handleOptInOptOut(jedis, sender, message, subscribedSetKey);
+                    }
                     if (isSubscribed) {
                         out.collect(new RoutedMessage("phishing", value));
                     } else {
