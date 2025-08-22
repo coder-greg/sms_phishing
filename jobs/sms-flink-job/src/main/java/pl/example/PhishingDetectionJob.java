@@ -38,10 +38,8 @@ public class PhishingDetectionJob {
         env
             .fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source: sms-for-phishing")
             .uid("kafka-source")
-            // Here you could add phishing detection logic, for now just forward
             .map(value -> {
                 System.out.println("Received for phishing detection: [" + value + "]");
-                // TODO: Add phishing detection logic here
                 return value;
             })
             .name("PhishingDetection")

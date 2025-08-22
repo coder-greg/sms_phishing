@@ -29,36 +29,39 @@ services:
       - zookeeper
 
   flink-jobmanager:
-    build:
-      context: .
-      dockerfile: docker/flink/Dockerfile
     image: local/sms-flink:latest
-    container_name: flink-jobmanager
     ports:
       - "8081:8081"
-    environment:
-      - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - SERVICE_NUMBER=48123456789
     command: jobmanager
-    depends_on:
-      - kafka
-      - redis
+    environment:
+      JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      SERVICE_NUMBER: "48123456789"
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        restart-strategy: fixed-delay
+        restart-strategy.fixed-delay.attempts: 999999
+        restart-strategy.fixed-delay.delay: 10 s
 
   flink-taskmanager:
     image: local/sms-flink:latest
-    container_name: flink-taskmanager
     depends_on:
       - flink-jobmanager
       - redis
-    environment:
-      - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
     command: taskmanager
+    environment:
+      JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 4
+        restart-strategy: fixed-delay
+        restart-strategy.fixed-delay.attempts: 999999
+        restart-strategy.fixed-delay.delay: 10 s
 
   redis:
     image: redis:7
