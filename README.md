@@ -90,3 +90,7 @@ Przykład:
 - `./webrisk-key.json`
 
 Plik ten jest wymagany do poprawnego działania integracji z Google Web Risk API.
+
+**Obraz dockera**
+
+https://hub.docker.com/repository/docker/grzech66/sms-flink/general

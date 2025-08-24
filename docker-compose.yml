@@ -29,10 +29,7 @@ services:
       - zookeeper
 
   flink-jobmanager:
-    image: local/sms-flink:latest
-    build:
-      context: .
-      dockerfile: docker/flink/Dockerfile
+    image: grzech66/sms-flink:latest
     ports:
       - "8081:8081"
     command: jobmanager
@@ -52,7 +49,7 @@ services:
         restart-strategy.fixed-delay.delay: 10 s
 
   flink-taskmanager:
-    image: local/sms-flink:latest
+    image: grzech66/sms-flink:latest
     depends_on:
       - flink-jobmanager
       - redis
