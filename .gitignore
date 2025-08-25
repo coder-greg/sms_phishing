@@ -1,0 +1,14 @@
+sms-flink-job/target/*
+jobs/sms-flink-job/target/original-sms-flink-job-1.0-SNAPSHOT.jar
+**.jar
+**.class
+jobs/sms-flink-job/target/classes/pl/example/SmsFlinkJob.class
+jobmanager_log.txt
+jobs/sms-flink-job/dependency-reduced-pom.xml
+jobs/sms-flink-job/src/main/java/pl/example/SmsFlinkJob.java
+jobs/sms-flink-job/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst
+jobs/sms-flink-job/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst
+
+# Prevent committing secrets
+secrets/
+!secrets/.gitkeep

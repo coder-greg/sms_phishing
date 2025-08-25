@@ -30,4 +30,67 @@ Hipotetyczny operator telekomunikacyjny dogadał się ze związkiem banków, że
 - Jeśli przyjęto dodatkowe założenia, należy je opisać w pliku README.
 - Jednym z ocenianych elementów jest przyjęta architektura rozwiązania. Decyzje architektoniczne należy opisać w README.
 - Operatorowi zależy na szybkim czasie wdrożenia i niskim koszcie obsługi.
-- W razie wątpliwości należy przyjąć prostszą funkcjonalność, ale przedstawić rozwiązanie jak najbardziej gotowe do wdrożenia produkcyjnego.
+# Proponowana architektura: Przetwarzanie strumieniowe z Apache Kafka i Apache Flink
+
+**Założenia**
+* Detekcja phishingu jest wykonywana wyłącznie dla SMS-ów, których odbiorcy są zapisani do usługi antyphishingowej (opcja opt-in). Dla pozostałych użytkowników wiadomości są przekazywane bez dodatkowej analizy.
+* System korzysta z cache przy sprawdzaniu linków z racji tego że API kosztuje oraz ze zwględu na wydajność. Nie chcemy sprawdzać w zewnętrzym API więcej niż raz tych samych linków
+* Do przechowywania statusu opt-in/opt-out użytkowników korzystamy z bazy Redis, co pozwala na szybki dostęp i prostą integrację z Flinkiem.
+
+**Opis komponentów:**
+- **Kafka sms-in Topic** – punkt wejścia dla wszystkich wiadomości SMS (JSON).
+- **Flink SMS Processing Job** – przetwarza strumień SMS, rozpoznaje komendy START/STOP, aktualizuje status użytkownika. Dla każdego SMS-a sprawdza, czy odbiorca jest zapisany do usługi:
+    - Jeśli TAK: przekazuje wiadomość do dalszej analizy phishingu poprze wrzucenie ich do topicku  "sms-for-phishing"
+    - Jeśli NIE: przekazuje wiadomość bezpośrednio do dostarczenia (bez analizy phishingu). "sms-out"
+- **User Subscription State Store** – przechowuje status opt-in/opt-out użytkowników w bazie Redis.
+- **Flink Phishing Detection Job** – analizuje tylko SMS-y użytkowników zapisanych do usługi, sprawdza linki przez Google Web Risk API, przekazuje czyste wiadomości dalej.
+- **Google Web Risk API** – sprawdza podejrzane linki
+- **Kafka sms-out Topic** – temat dla zweryfikowanych, bezpiecznych wiadomości oraz tych, które nie wymagają analizy (użytkownicy nie zapisani).
+- **Kafka sms-for-phishing Topic** – temat dla wiadomości do weryfikacji
+- **Kafka sms-scam Topic** – temat dla wiadomości będących potencjalny phishing
+- **SMS Delivery System** – system końcowy dostarczający SMS do odbiorcy.
+
+### Diagram architektur
+
+
+```mermaid
+flowchart LR
+    A[SMS Producer] --> B[Kafka sms-in Topic]
+    B --> C[Flink SMS Processing Job]
+    C -->|START/STOP| D[Redis: User Subscription State]
+    C -->|SMS zapisany| E[Kafka sms-for-phishing Topic]
+    C -->|SMS niezapisany| F[Kafka sms-out Topic]
+    E --> G[Flink Phishing Detection Job]
+    G -->|Phishing Check| H[Google Web Risk API]
+    G -->|Wiadomość OK| F
+    G -->|Phishing| I[Kafka sms-scam Topic]
+    F --> J[SMS Delivery System]
+```
+
+**Opis:**
+- Pierwszy job Flinka obsługuje START/STOP, aktualizuje stan użytkownika i dla każdego SMS-a sprawdza, czy odbiorca jest zapisany do usługi:
+    - Jeśli TAK: przekazuje SMS do kolejnego joba (detekcja phishingu).
+    - Jeśli NIE: przekazuje SMS bezpośrednio do dostarczenia (bez analizy phishingu).
+- Drugi job Flinka zajmuje się detekcją phishingu wyłącznie dla SMS-ów użytkowników zapisanych do usługi, integracją z Google Web Risk API i przekazywaniem bezpiecznych wiadomości do końcowego systemu.
+- Stan użytkowników przechowywany jest w bazie Redis.
+
+# Instrukcja uruchomienia
+
+Aby uruchomić projekt, wykonaj skrypt:
+
+```bash
+./scripts/build_and_run.sh
+```
+
+**Wymagania:**
+- Plik z poświadczeniami Google Web Risk (`webrisk-key.json`) musi być umieszczony zarówno w katalogu `secrets`, jak i w katalogu głównym projektu.
+
+Przykład:
+- `secrets/webrisk-key.json`
+- `./webrisk-key.json`
+
+Plik ten jest wymagany do poprawnego działania integracji z Google Web Risk API.
+
+**Obraz dockera**
+
+https://hub.docker.com/repository/docker/grzech66/sms-flink/general
